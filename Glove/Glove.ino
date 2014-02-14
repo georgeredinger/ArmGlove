@@ -4,15 +4,11 @@
 #include "CircularBuffer.h"
 const int LED = 13;
 long count=0;
+CircularBuffer cb;
 
-  struct {
-  unsigned index;
-  unsigned long mills;
-  sensors_event_t event;
-} 
-cap;
-#define BUFFERSIZE 250
-CircularBuffer<cap,BUFFERSIZE> capture;
+struct ElemType cap;
+#define BUFFER_SIZE 500
+//CircularBuffer<cap,BUFFERSIZE> capture;
 
 // This example code is in the public domain.
 
@@ -29,12 +25,9 @@ void setup()
   pinMode(LED, OUTPUT);
   Serial1.println("LED OFF. Press 1 to LED ON!");  // print message
   Serial1.println("LED ON. Press 0 to LED OFF!");
+  int testBufferSize = 10; /* arbitrary size */
+  cbInit(&cb, BUFFER_SIZE);
 
-  char s[20];
-  Serial.println("before sprintf");
-  sprintf(s,"%f\n","123.456");
-  Serial.print(s);
-  Serial.println("after sprintf");
   if(!accel.begin())
   {
     /* There was a problem detecting the ADXL345 ... check your connections */
@@ -47,7 +40,24 @@ void setup()
   // displaySetRange(ADXL345_RANGE_8_G);
   // displaySetRange(ADXL345_RANGE_4_G);
   // displaySetRange(ADXL345_RANGE_2_G);
+  accel.setDataRate(ADXL345_DATARATE_800_HZ);
+  //  ADXL345_DATARATE_3200_HZ    = 0b1111, // 1600Hz Bandwidth   140µA IDD
+  //  ADXL345_DATARATE_1600_HZ    = 0b1110, //  800Hz Bandwidth    90µA IDD
+  //  ADXL345_DATARATE_800_HZ     = 0b1101, //  400Hz Bandwidth   140µA IDD
+  //  ADXL345_DATARATE_400_HZ     = 0b1100, //  200Hz Bandwidth   140µA IDD
+  //  ADXL345_DATARATE_200_HZ     = 0b1011, //  100Hz Bandwidth   140µA IDD
+  //  ADXL345_DATARATE_100_HZ     = 0b1010, //   50Hz Bandwidth   140µA IDD
+  //  ADXL345_DATARATE_50_HZ      = 0b1001, //   25Hz Bandwidth    90µA IDD
+  //  ADXL345_DATARATE_25_HZ      = 0b1000, // 12.5Hz Bandwidth    60µA IDD
+  //  ADXL345_DATARATE_12_5_HZ    = 0b0111, // 6.25Hz Bandwidth    50µA IDD
+  //  ADXL345_DATARATE_6_25HZ     = 0b0110, // 3.13Hz Bandwidth    45µA IDD
+  //  ADXL345_DATARATE_3_13_HZ    = 0b0101, // 1.56Hz Bandwidth    40µA IDD
+  //  ADXL345_DATARATE_1_56_HZ    = 0b0100, // 0.78Hz Bandwidth    34µA IDD
+  //  ADXL345_DATARATE_0_78_HZ    = 0b0011, // 0.39Hz Bandwidth    23µA IDD
+  //  ADXL345_DATARATE_0_39_HZ    = 0b0010, // 0.20Hz Bandwidth    23µA IDD
+  //  ADXL345_DATARATE_0_20_HZ    = 0b0001, // 0.10Hz Bandwidth    23µA IDD  accel.setDataRate(ADXL345_DATARATE_100_HZ);
 
+  //  ADXL345_DATARATE_0_10_HZ    = 0b0000  // 0.05Hz Bandwidth    23µA IDD (default value)
 }
 
 
@@ -75,9 +85,8 @@ void loop() {
     unsigned long trigger_time;
     unsigned long start=millis();
     unsigned index=0;
-    capture.clear();
     sensors_event_t event; 
-    cap capt;
+    struct ElemType capt;
     bool trigger=false;
     int sample=0;
     while((millis()-start)<10000){
@@ -85,27 +94,29 @@ void loop() {
       capt.index=index++;
       capt.mills=millis();
       capt.event = event;
-      capture.push(capt);
-       if(trigger){
-         if(sample++ > BUFFERSIZE/4)
+      cbWrite(&cb,&capt);
+      if(trigger){
+        if(sample++ > BUFFER_SIZE/4)
           break;
-      } else  if((abs(event.acceleration.x) + abs(event.acceleration.y) + abs(event.acceleration.z)) > 40.0) {
+      } 
+      else  if((abs(event.acceleration.x) + abs(event.acceleration.y) + abs(event.acceleration.z)) > 40.0) {
         trigger=true;
         trigger_time=millis();
       }
-     
-      delay(3);
+
     }
 
     digitalWrite(LED, LOW);  // if 1, switch LED Off
+    struct ElemType cb_start;
     if(trigger){
-       unsigned long end = capture.pop().mills;
+      cbRead(&cb,&cb_start);
+      unsigned long end = cb_start.mills;
 
       Serial1.println("Start");
-      while(capture.remain()> 0){
-        capt=capture.pop();
+      while (!cbIsEmpty(&cb)) {
+        cbRead(&cb, &capt);    
         char s[30];
-        sprintf(s,"%d,%2.1f,%2.1f,%2.1f\n",(capt.index),capt.event.acceleration.x,capt.event.acceleration.y,capt.event.acceleration.z);
+        sprintf(s,"%d,%2.1f,%2.1f,%2.1f\n",(capt.mills-trigger_time),capt.event.acceleration.x,capt.event.acceleration.y,capt.event.acceleration.z);
         Serial.print(s);
         Serial1.print(s);
       }
@@ -116,6 +127,8 @@ void loop() {
     }
   }
 }
+
+
 
 
 
