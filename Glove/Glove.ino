@@ -5,7 +5,7 @@
 const int LED = 13;
 long count=0;
 
-typedef  struct {
+  struct {
   unsigned index;
   unsigned long mills;
   sensors_event_t event;
