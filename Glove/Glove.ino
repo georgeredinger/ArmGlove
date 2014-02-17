@@ -1,32 +1,34 @@
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_ADXL345_U.h>
-#include "CircularBuffer.h"
+#include "CaptureBuffer.h"
 const int LED = 13;
 long count=0;
-CircularBuffer cb;
-
-struct ElemType cap;
 #define BUFFER_SIZE 500
-//CircularBuffer<cap,BUFFERSIZE> capture;
 
-// This example code is in the public domain.
+struct SampleType{
+  unsigned index;
+  unsigned long mills;
+  sensors_event_t event;
+};
 
+capture_buffer <SampleType,BUFFER_SIZE> circ;
+
+struct SampleType cap;
 
 Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
 
 boolean fast=false;
 
-
 void setup()
 {
   Serial1.begin(9600);
   Serial.begin(115200);
+
   pinMode(LED, OUTPUT);
   Serial1.println("LED OFF. Press 1 to LED ON!");  // print message
   Serial1.println("LED ON. Press 0 to LED OFF!");
-  int testBufferSize = 10; /* arbitrary size */
-  cbInit(&cb, BUFFER_SIZE);
+  //cbInit(&cb, BUFFER_SIZE);
 
   if(!accel.begin())
   {
@@ -86,7 +88,7 @@ void loop() {
     unsigned long start=millis();
     unsigned index=0;
     sensors_event_t event; 
-    struct ElemType capt;
+    struct SampleType capt;
     bool trigger=false;
     int sample=0;
     while((millis()-start)<10000){
@@ -94,7 +96,7 @@ void loop() {
       capt.index=index++;
       capt.mills=millis();
       capt.event = event;
-      cbWrite(&cb,&capt);
+      circ.write(capt);
       if(trigger){
         if(sample++ > BUFFER_SIZE/4)
           break;
@@ -107,16 +109,13 @@ void loop() {
     }
 
     digitalWrite(LED, LOW);  // if 1, switch LED Off
-    struct ElemType cb_start;
+    struct SampleType circ_sample;
     if(trigger){
-      cbRead(&cb,&cb_start);
-      unsigned long end = cb_start.mills;
-
-      Serial1.println("Start");
-      while (!cbIsEmpty(&cb)) {
-        cbRead(&cb, &capt);    
-        char s[30];
-        sprintf(s,"%d,%2.1f,%2.1f,%2.1f\n",(capt.mills-trigger_time),capt.event.acceleration.x,capt.event.acceleration.y,capt.event.acceleration.z);
+      //long start_time = circ.read().mills;
+      while(!circ.empty()) {   
+        circ_sample = circ.read();
+        char s[40];
+        sprintf(s,"%d,%2.1f,%2.1f,%2.1f\n",circ_sample.mills-trigger_time,circ_sample.event.acceleration.x,circ_sample.event.acceleration.y,circ_sample.event.acceleration.z);
         Serial.print(s);
         Serial1.print(s);
       }
@@ -124,9 +123,12 @@ void loop() {
     }
     else{
       Serial1.println("no trigger");
+      Serial.println("no trigger");
+
     }
   }
 }
+
 
 
 
